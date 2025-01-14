@@ -3,9 +3,9 @@ import threading
 import time
 import struct
 import random
+from colorama import Fore, Style  # To manage colored text
 
 from util import MAGIC_COOKIE, OFFER_MESSAGE_TYPE, REQUEST_MESSAGE_TYPE, PAYLOAD_MESSAGE_TYPE
-
 
 class Client:
     def __init__(self):
@@ -32,8 +32,8 @@ class Client:
 
     def listen_for_offers(self):
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)  # Ensure broadcast messages are received
-            sock.bind(("", 13117))  # random port to allow multiple client processes
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            sock.bind(("", 13117))
             while True:
                 data, addr = sock.recvfrom(1024)
                 if len(data) < 9:
@@ -48,63 +48,75 @@ class Client:
 
                 print(f"Received offer from {self.server_ip}")
                 self.speed_test()
-                return
 
     def speed_test(self):
         tcp_threads = []
         udp_threads = []
 
-        for _ in range(self.tcp_connections):
-            tcp_thread = threading.Thread(target=self.tcp_transfer)
+        for index in range(self.tcp_connections):
+            tcp_thread = threading.Thread(target=self.tcp_transfer, args=(index,))
             tcp_threads.append(tcp_thread)
             tcp_thread.start()
 
-        for _ in range(self.udp_connections):
-            udp_thread = threading.Thread(target=self.udp_transfer)
+        for index in range(self.udp_connections):
+            udp_thread = threading.Thread(target=self.udp_transfer, args=(index,))
             udp_threads.append(udp_thread)
             udp_thread.start()
 
         for thread in tcp_threads + udp_threads:
             thread.join()
 
+        print("\n" + "_" * 77)
         print("All transfers complete, listening to offer requests")
 
-    def tcp_transfer(self):
+    def tcp_transfer(self, index):
         start_time = time.time()
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.connect((self.server_ip, self.tcp_port))
-            sock.sendall(f"{self.file_size}\n".encode())
-            received_data = sock.recv(self.file_size)
-        duration = time.time() - start_time
-        speed = (len(received_data) * 8) / duration
-        print(f"TCP transfer finished, total time: {duration:.2f} seconds, total speed: {speed:.2f} bits/second")
+        color = random.choice([Fore.RED, Fore.GREEN, Fore.BLUE, Fore.CYAN, Fore.MAGENTA, Fore.YELLOW])
 
-    def udp_transfer(self):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.connect((self.server_ip, self.tcp_port))
+                sock.sendall(f"{self.file_size}\n".encode())
+                received_data = sock.recv(self.file_size)
+
+            duration = time.time() - start_time
+            if duration == 0:
+                duration = 0.001  # Avoid division by zero
+            speed = (len(received_data) * 8) / duration
+            print(f"{color}[TCP-{index}] Transfer finished: Time: {duration:.2f}s, Speed: {speed:.2f} bits/s{Style.RESET_ALL}\n")
+        except Exception as e:
+            print(f"{color}[TCP-{index}] Error during transfer: {e}{Style.RESET_ALL}\n")
+
+    def udp_transfer(self, index):
         start_time = time.time()
         segment_size = 1024
         total_segments = (self.file_size + segment_size - 1) // segment_size
         received_segments = 0
+        color = random.choice([Fore.RED, Fore.GREEN, Fore.BLUE, Fore.CYAN, Fore.MAGENTA, Fore.YELLOW])
 
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-            sock.sendto(struct.pack('!IBQ', MAGIC_COOKIE, REQUEST_MESSAGE_TYPE, self.file_size),
-                        (self.server_ip, self.udp_port))
-            sock.settimeout(1)
-            while True:
-                try:
-                    data, _ = sock.recvfrom(2048)
-                    cookie, message_type, total, current = struct.unpack('!IBQQ', data[:21])
-                    if cookie != MAGIC_COOKIE or message_type != PAYLOAD_MESSAGE_TYPE:
-                        continue
-                    received_segments += 1
-                except socket.timeout:
-                    break
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+                sock.sendto(struct.pack('!IBQ', MAGIC_COOKIE, REQUEST_MESSAGE_TYPE, self.file_size),
+                            (self.server_ip, self.udp_port))
+                sock.settimeout(1)
+                while True:
+                    try:
+                        data, _ = sock.recvfrom(2048)
+                        cookie, message_type, total, current = struct.unpack('!IBQQ', data[:21])
+                        if cookie != MAGIC_COOKIE or message_type != PAYLOAD_MESSAGE_TYPE:
+                            continue
+                        received_segments += 1
+                    except socket.timeout:
+                        break
 
-        duration = time.time() - start_time
-        speed = (received_segments * segment_size * 8) / duration
-        success_rate = (received_segments / total_segments) * 100
-        print(
-            f"UDP transfer finished, total time: {duration:.2f} seconds, total speed: {speed:.2f} bits/second, percentage of packets received successfully: {success_rate:.2f}%")
-
+            duration = time.time() - start_time
+            if duration == 0:
+                duration = 0.001  # Avoid division by zero
+            speed = (received_segments * segment_size * 8) / duration
+            success_rate = (received_segments / total_segments) * 100
+            print(f"{color}[UDP-{index}] Transfer finished: Time: {duration:.2f}s, Speed: {speed:.2f} bits/s, Success: {success_rate:.2f}%{Style.RESET_ALL}\n")
+        except Exception as e:
+            print(f"{color}[UDP-{index}] Error during transfer: {e}{Style.RESET_ALL}\n")
 
 if __name__ == "__main__":
     client = Client()
