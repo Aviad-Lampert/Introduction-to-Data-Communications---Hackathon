@@ -65,7 +65,6 @@ class Server:
         finally:
             conn.close()
 
-
     def start_udp_server(self):
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as server_sock:
             server_sock.bind((self.ip, self.udp_port))
@@ -106,9 +105,20 @@ class Server:
             print(f"Error handling UDP client: {e}")
 
 
+def get_current_ip():
+    """Gets the current IP address of the machine."""
+    try:
+        # Create a temporary socket to determine the IP address
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            # Connecting to a non-routable IP address (it won't actually send data)
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+    except Exception as e:
+        print(f"Could not determine the IP address: {e}")
+        return "127.0.0.1"  # Fallback to localhost
+
 
 if __name__ == "__main__":
-    server = Server("10.9.1.243", 13117, 20001, 20002)
+    current_ip = get_current_ip()
+    server = Server(current_ip, 13117, 20001, 20002)
     server.start()
-
-
